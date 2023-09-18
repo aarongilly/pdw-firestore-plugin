@@ -1,6 +1,6 @@
 import './style.css'
-import * as pdw from './pdw';
-import { FireDataStore } from './firestore.ts';
+import * as pdw from 'pdw/out/pdw';
+import { FireDataStore } from './firestore';
 // import { Query } from 'firebase/firestore';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -67,7 +67,6 @@ async function read() {
     //   let def = await pdwRef.getDefs({type: "Def", updatedAfter: 'lmh85om9', createdBefore: 'lmh85omb', includeDeleted: 'yes'});
 
     console.log(result);
-    
 
     document.querySelector<HTMLButtonElement>('#result-head')!.innerText = key + ": " + val;
     document.querySelector<HTMLButtonElement>('#result')!.innerHTML = 'Length: ' + result.entries.length + "<br/>" + JSON.stringify(result.entries.map(d => d.toData()), null, 4);

@@ -1,8 +1,16 @@
 {
   "name": "pdw-firestore-plugin",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
+  "main": "/firestore.js",
+  "types": "/firestore.d.ts",
+  "license": "MIT",
+  "files": [
+    "/out/firestore.js",
+    "/out/firestore.d.ts",
+    "/out/firestore.js.map"
+  ],
+  "description": "A plugin for the PDW Package for working with Firestore",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -14,6 +22,7 @@
   },
   "dependencies": {
     "firebase": "^10.3.1",
+    "pdw": "^0.0.13",
     "temporal-polyfill": "^0.1.1"
   }
 }
