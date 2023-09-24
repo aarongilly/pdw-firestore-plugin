@@ -3,7 +3,6 @@ import { initializeApp } from "firebase/app";
 import * as fire from 'firebase/firestore';
 import * as pdw from 'pdw/out/pdw.js';
 
-
 export class FireDataStore implements pdw.DataStore {
     pdw?: pdw.PDW;
     serviceName: string;
