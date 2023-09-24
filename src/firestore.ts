@@ -135,7 +135,7 @@ export class FireDataStore implements pdw.DataStore {
     static async init(firebaseConfig: any, pdwRef: pdw.PDW): Promise<boolean> {
         const firestoreInstance = new FireDataStore(firebaseConfig);
         await firestoreInstance.connect(pdwRef);
-        pdwRef.setDataStore(firestoreInstance);
+        await pdwRef.setDataStore(firestoreInstance);
         return true
     }
 
