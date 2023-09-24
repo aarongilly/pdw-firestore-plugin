@@ -1,7 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import * as fire from 'firebase/firestore';
-import * as pdw from 'pdw/out/pdw';
+import * as pdw from 'pdw/out/pdw.js';
 
 
 export class FireDataStore implements pdw.DataStore {
