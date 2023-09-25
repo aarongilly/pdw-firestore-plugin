@@ -1,6 +1,6 @@
 {
   "name": "pdw-firestore-plugin",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "type": "module",
   "main": "/firestore.js",
   "types": "/firestore.d.ts",
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "firebase": "^10.3.1",
-    "pdw": "^0.0.16",
+    "pdw": "^0.0.21",
     "temporal-polyfill": "^0.1.1"
   }
 }

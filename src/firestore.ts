@@ -1,7 +1,24 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import * as fire from 'firebase/firestore';
-import * as pdw from 'pdw/out/pdw.js';
+import * as pdw from 'pdw';
+import { Timestamp } from "firebase/firestore";
+
+function translateEntryToFirestore(entry: pdw.Entry): any {
+    let returnData = entry.toData()
+    returnData.periodEnd = periodToTimeStamp(entry.period)
+    return returnData;
+}
+
+function translateFirestoreToEntry(firestoreEntryData: any): pdw.EntryData {
+    let fireDataCopy = JSON.parse(JSON.stringify(firestoreEntryData));
+    delete fireDataCopy.periodEnd;
+    return fireDataCopy as pdw.EntryData
+}
+
+function periodToTimeStamp(period: pdw.Period): Timestamp {
+    return new Timestamp(period.getEnd().toTemporalPlainDate().toZonedDateTime('UTC').epochSeconds, 0);
+}
 
 export class FireDataStore implements pdw.DataStore {
     pdw?: pdw.PDW;
@@ -26,8 +43,9 @@ export class FireDataStore implements pdw.DataStore {
         elementTypes.forEach(async elementType => {
             //@ts-expect-error
             trans.create[elementType].forEach(async element => {
+                let data = translateEntryToFirestore(element);
                 try {
-                    await fire.setDoc(fire.doc(this.db, elementType, element.uid), element.toData());
+                    await fire.setDoc(fire.doc(this.db, elementType, element.uid), data);
                 } catch (e) {
                     console.error("Error adding document: ", e);
                 }
@@ -58,7 +76,7 @@ export class FireDataStore implements pdw.DataStore {
             //@ts-expect-error
             trans.delete[elementType].forEach(async element => {
                 try {
-                    console.log('attempting to delete', element);
+                    // console.log('attempting to delete', element);
 
                     await fire.setDoc(fire.doc(this.db, elementType, element.uid), {
                         _deleted: element.deleted,
@@ -71,13 +89,28 @@ export class FireDataStore implements pdw.DataStore {
         })
     }
 
-    async reducedQuery(params: pdw.ReducedParams): Promise<pdw.ReducedQueryResponse> {
+    async getDefs(includeDeletedForArchiving = false): Promise<pdw.DefData[]> {
+        
+        let returnArr: pdw.DefData[] = [];
+        const whereClauses: fire.QueryFieldFilterConstraint[] = [];
+        if (!includeDeletedForArchiving) {
+            whereClauses.push(fire.where('_deleted', '==', false));
+        }
+        let q = fire.query(fire.collection(this.db, 'defs'), ...whereClauses) as fire.CollectionReference;
+        const docSnap = await fire.getDocs(q);
+        docSnap.forEach(doc => {
+            const parsedDefData = doc.data() as pdw.DefData;
+            returnArr.push(parsedDefData)
+        })
+        return returnArr
+    }
+
+    async getEntries(params: pdw.ReducedParams): Promise<pdw.ReducedQueryResponse> {
         if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance")
         console.info("running query with params:", params);
         let returnObj: pdw.ReducedQueryResponse = {
             success: true, //default assume happy!
-            entries: [],
-            defs: []
+            entries: []
         }
 
         const whereClauses: fire.QueryFieldFilterConstraint[] = [];
@@ -90,38 +123,24 @@ export class FireDataStore implements pdw.DataStore {
         if (params.updatedBeforeEpochStr !== undefined) whereClauses.push(fire.where('_updated', "<", params.updatedBeforeEpochStr));
         if (params.defLbl !== undefined) whereClauses.push(fire.where('_lbl', "in", params.defLbl));
         if (params.did !== undefined) whereClauses.push(fire.where('_did', 'in', params.did));
-        if (params.tag !== undefined) whereClauses.push(fire.where('_tags', 'array-contains-any', params.tag));
         if (params.scope !== undefined) whereClauses.push(fire.where('_scope', 'in', params.scope));
+        if (params.from !== undefined) whereClauses.push(fire.where('periodEnd', ">=", periodToTimeStamp(params.from)));
+        if (params.to !== undefined) whereClauses.push(fire.where('periodEnd', "<=", periodToTimeStamp(params.to)));
 
-        if (params.type === 'Def' || params.type === 'All') {
-            try {
-                let q = fire.query(fire.collection(this.db, 'defs'), ...whereClauses) as fire.CollectionReference;
-                const docSnap = await fire.getDocs(q);
-                docSnap.forEach(doc => {
-                    returnObj.defs.push(doc.data() as pdw.DefData)
-                })
-            } catch (e: any) {
-                returnObj.success = false;
-                returnObj.msgs = e.toString();
-                return returnObj;
-            }
+        try {
+            let q = fire.query(fire.collection(this.db, 'entries'), ...whereClauses) as fire.CollectionReference;
+            const docSnap = await fire.getDocs(q);
+            docSnap.forEach(doc => {
+                const parsedEntryData = translateFirestoreToEntry(doc.data()) as pdw.EntryData;
+                returnObj.entries.push(parsedEntryData)
+            })
+        } catch (e: any) {
+            returnObj.success = false;
+            returnObj.msgs = e.toString();
+            return returnObj;
         }
-        console.log(params.type);
-        if (params.type === 'Entry' || params.type === 'All') {
-            
-            try {
-                let q = fire.query(fire.collection(this.db, 'entries'), ...whereClauses) as fire.CollectionReference;
-                const docSnap = await fire.getDocs(q);
-                docSnap.forEach(doc => {
-                    returnObj.entries.push(doc.data() as pdw.EntryData)
-                })
-            } catch (e: any) {
-                returnObj.success = false;
-                returnObj.msgs = e.toString();
-                return returnObj;
-            }
-        }
-        console.log(returnObj);
+
+        // console.log(returnObj);
 
         return returnObj
     }

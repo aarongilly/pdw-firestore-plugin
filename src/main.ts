@@ -1,5 +1,5 @@
 import './style.css'
-import * as pdw from 'pdw/out/pdw';
+import * as pdw from 'pdw';
 import { FireDataStore } from './firestore';
 // import { Query } from 'firebase/firestore';
 
@@ -26,7 +26,7 @@ document.querySelector<HTMLButtonElement>('#key')!.value = 'did';//'uid';
 document.querySelector<HTMLButtonElement>('#val')!.value = 'dddd';//'lmp14tdp-2egb';
 
 document.querySelector<HTMLButtonElement>('#val')!.onkeyup = (key => {
-    if (key.code === "Enter") read()
+    if (key.code === "Enter") read();
 })
 
 //establish singleton
@@ -42,13 +42,15 @@ const firebaseConfig = {
     appId: "1:59120475131:web:435d58cffcf9e629ed495e"
 };
 
-FireDataStore.init(firebaseConfig, pdwRef);
+await FireDataStore.init(firebaseConfig, pdwRef);
 
 async function write() {
-    let def = pdwRef.getFromManifest('dddd');
+    // console.log(pdwRef.manifest);
+    // return
+    let def = pdwRef.getFromManifest("0vnh");
     console.log('Writing');
     def.newEntry({
-        'ddd1': 'Recursion'
+        '_note': 'Hello world!'
     })
 }
 
@@ -59,16 +61,16 @@ async function read() {
     document.querySelector<HTMLButtonElement>('#result')!.innerText = "...searching";
 
     // let def = await pdwRef.getDefs({[key]: val, includeDeleted: 'yes' });
-    // let entries = await pdwRef.getEntries({[key]: val, includeDeleted: 'yes' });
-    let q = new pdw.Query();
-    q.forDids(val)
-    const result = await q.run();
+    let entries = await pdwRef.getEntries({[key]: val, includeDeleted: 'yes' });
+    // let q = new pdw.Query();
+    // q.forDids(val);
+    // const result = await q.run();
     //   let def = await pdwRef.getDefs({type: "Def", did: 'bbbb', includeDeleted: 'yes'});
     //   let def = await pdwRef.getDefs({type: "Def", updatedAfter: 'lmh85om9', createdBefore: 'lmh85omb', includeDeleted: 'yes'});
 
-    console.log(result);
+    console.log(entries);
 
     document.querySelector<HTMLButtonElement>('#result-head')!.innerText = key + ": " + val;
-    document.querySelector<HTMLButtonElement>('#result')!.innerHTML = 'Length: ' + result.entries.length + "<br/>" + JSON.stringify(result.entries.map(d => d.toData()), null, 4);
+    document.querySelector<HTMLButtonElement>('#result')!.innerHTML = 'Length: ' + entries.length + "<br/>" + JSON.stringify(entries.map(d => d.toData()), null, 4);
 }
 
