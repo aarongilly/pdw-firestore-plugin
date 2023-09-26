@@ -6,7 +6,7 @@ import { Timestamp } from "firebase/firestore";
 
 function translateEntryToFirestore(entry: pdw.Entry): any {
     let returnData = entry.toData()
-    returnData.periodEnd = periodToTimeStamp(entry.period)
+    returnData.periodEnd = entry.period.getEnd().toString();
     return returnData;
 }
 
@@ -16,9 +16,9 @@ function translateFirestoreToEntry(firestoreEntryData: any): pdw.EntryData {
     return fireDataCopy as pdw.EntryData
 }
 
-function periodToTimeStamp(period: pdw.Period): Timestamp {
-    return new Timestamp(period.getEnd().toTemporalPlainDate().toZonedDateTime('UTC').epochSeconds, 0);
-}
+// function periodToTimeStamp(period: pdw.Period): Timestamp {
+//     return new Timestamp(period.getEnd().toTemporalPlainDate().toZonedDateTime('UTC').epochSeconds, 0);
+// }
 
 export class FireDataStore implements pdw.DataStore {
     pdw?: pdw.PDW;
@@ -124,8 +124,8 @@ export class FireDataStore implements pdw.DataStore {
         if (params.defLbl !== undefined) whereClauses.push(fire.where('_lbl', "in", params.defLbl));
         if (params.did !== undefined) whereClauses.push(fire.where('_did', 'in', params.did));
         if (params.scope !== undefined) whereClauses.push(fire.where('_scope', 'in', params.scope));
-        if (params.from !== undefined) whereClauses.push(fire.where('periodEnd', ">=", periodToTimeStamp(params.from)));
-        if (params.to !== undefined) whereClauses.push(fire.where('periodEnd', "<=", periodToTimeStamp(params.to)));
+        if (params.from !== undefined) whereClauses.push(fire.where('periodEnd', ">=", params.from.getStart().toString()));
+        if (params.to !== undefined) whereClauses.push(fire.where('periodEnd', "<=", params.to.getEnd().toString()));
 
         try {
             let q = fire.query(fire.collection(this.db, 'entries'), ...whereClauses) as fire.CollectionReference;
