@@ -2,7 +2,6 @@
 import { initializeApp } from "firebase/app";
 import * as fire from 'firebase/firestore';
 import * as pdw from 'pdw';
-import { Timestamp } from "firebase/firestore";
 
 function translateEntryToFirestore(entry: pdw.Entry): any {
     let returnData = entry.toData()
@@ -36,7 +35,7 @@ export class FireDataStore implements pdw.DataStore {
         console.log('✅ Connected to ' + this.db.app.options.projectId);
     }
 
-    //@ts-expect-error - //#TODO - make DataStore calls Async, obviously
+    //@ts-expect-error
     async commit(trans: pdw.Transaction): Promise<pdw.CommitResponse> {
         if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance")
         const elementTypes = ['defs', 'entries'];
@@ -76,8 +75,6 @@ export class FireDataStore implements pdw.DataStore {
             //@ts-expect-error
             trans.delete[elementType].forEach(async element => {
                 try {
-                    // console.log('attempting to delete', element);
-
                     await fire.setDoc(fire.doc(this.db, elementType, element.uid), {
                         _deleted: element.deleted,
                         _updated: element.updated
@@ -90,7 +87,6 @@ export class FireDataStore implements pdw.DataStore {
     }
 
     async getDefs(includeDeletedForArchiving = false): Promise<pdw.DefData[]> {
-        
         let returnArr: pdw.DefData[] = [];
         const whereClauses: fire.QueryFieldFilterConstraint[] = [];
         if (!includeDeletedForArchiving) {
@@ -105,14 +101,20 @@ export class FireDataStore implements pdw.DataStore {
         return returnArr
     }
 
-    async getEntries(params: pdw.ReducedParams): Promise<pdw.ReducedQueryResponse> {
-        if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance")
-        console.info("running query with params:", params);
-        let returnObj: pdw.ReducedQueryResponse = {
-            success: true, //default assume happy!
-            entries: []
-        }
+    subscribeToQuery(params: pdw.ReducedParams, callback: (entries: pdw.Entry[]) => any): Function{
+        const pdwRef = pdw.PDW.getInstance();
+        const unsub = fire.onSnapshot(this.buildQueryFromParams(params),(docSnap)=>{
+            let entries: pdw.Entry[] = [];
+            docSnap.forEach(doc => {
+                const parsedEntryData = translateFirestoreToEntry(doc.data()) as pdw.EntryData;
+                entries.push(new pdw.Entry(parsedEntryData));
+            })
+            callback(entries);
+        })
+        return unsub
+    }
 
+    private buildQueryFromParams(params: pdw.ReducedParams): fire.Query{
         const whereClauses: fire.QueryFieldFilterConstraint[] = [];
         if (params.uid !== undefined) whereClauses.push(fire.where('_uid', 'in', params.uid));
         if (params.includeDeleted === 'no') whereClauses.push(fire.where('_deleted', '==', false));
@@ -121,14 +123,23 @@ export class FireDataStore implements pdw.DataStore {
         if (params.createdBeforeEpochStr !== undefined) whereClauses.push(fire.where('_created', "<", params.createdBeforeEpochStr));
         if (params.updatedAfterEpochStr !== undefined) whereClauses.push(fire.where('_updated', ">", params.updatedAfterEpochStr));
         if (params.updatedBeforeEpochStr !== undefined) whereClauses.push(fire.where('_updated', "<", params.updatedBeforeEpochStr));
-        if (params.defLbl !== undefined) whereClauses.push(fire.where('_lbl', "in", params.defLbl));
         if (params.did !== undefined) whereClauses.push(fire.where('_did', 'in', params.did));
         if (params.scope !== undefined) whereClauses.push(fire.where('_scope', 'in', params.scope));
         if (params.from !== undefined) whereClauses.push(fire.where('periodEnd', ">=", params.from.getStart().toString()));
         if (params.to !== undefined) whereClauses.push(fire.where('periodEnd', "<=", params.to.getEnd().toString()));
+        return fire.query(fire.collection(this.db, 'entries'), ...whereClauses);
+    }
+
+    async getEntries(params: pdw.ReducedParams): Promise<pdw.ReducedQueryResponse> {
+        if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance")
+        let returnObj: pdw.ReducedQueryResponse = {
+            success: true, //default assume happy!
+            entries: []
+        }
+
+        let q = this.buildQueryFromParams(params)
 
         try {
-            let q = fire.query(fire.collection(this.db, 'entries'), ...whereClauses) as fire.CollectionReference;
             const docSnap = await fire.getDocs(q);
             docSnap.forEach(doc => {
                 const parsedEntryData = translateFirestoreToEntry(doc.data()) as pdw.EntryData;
