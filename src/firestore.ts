@@ -3,9 +3,9 @@ import { initializeApp } from "firebase/app";
 import * as fire from 'firebase/firestore';
 import * as pdw from 'pdw';
 
-function translateEntryToFirestore(entry: pdw.Entry): any {
-    let returnData = entry.toData()
-    returnData.periodEnd = entry.period.getEnd().toString();
+function translateElementToFirestore(element: pdw.Entry | pdw.Def): any {
+    let returnData = element.toData()
+    if(element.getType() === 'EntryData') returnData.periodEnd = (<pdw.Entry>element).period.getEnd().toString();
     return returnData;
 }
 
@@ -14,10 +14,6 @@ function translateFirestoreToEntry(firestoreEntryData: any): pdw.EntryData {
     delete fireDataCopy.periodEnd;
     return fireDataCopy as pdw.EntryData
 }
-
-// function periodToTimeStamp(period: pdw.Period): Timestamp {
-//     return new Timestamp(period.getEnd().toTemporalPlainDate().toZonedDateTime('UTC').epochSeconds, 0);
-// }
 
 export class FireDataStore implements pdw.DataStore {
     pdw?: pdw.PDW;
@@ -42,7 +38,7 @@ export class FireDataStore implements pdw.DataStore {
         elementTypes.forEach(async elementType => {
             //@ts-expect-error
             trans.create[elementType].forEach(async element => {
-                let data = translateEntryToFirestore(element);
+                let data = translateElementToFirestore(element);
                 try {
                     await fire.setDoc(fire.doc(this.db, elementType, element.uid), data);
                 } catch (e) {
