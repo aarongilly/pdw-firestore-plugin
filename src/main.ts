@@ -43,6 +43,9 @@ const firebaseConfig = {
 };
 
 await FireDataStore.init(firebaseConfig, pdwRef);
+await pdwRef.getFromManifest('aaaa').newEntry({});
+
+console.log(await pdwRef.getDefs(true))
 
 async function write() {
     // console.log(pdwRef.manifest);
