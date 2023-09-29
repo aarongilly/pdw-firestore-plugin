@@ -74,11 +74,12 @@ export class FireDataStore implements pdw.DataStore {
             }
         })
         trans.update.entries.forEach(async element => {
+            let data = translateElementToFirestore(element);
             try {
-                const docRef = fire.doc(this.db, 'entries', element.uid);
+                const docRef = fire.doc(this.db, 'entries', data.uid);
                 const docSnap = await fire.getDoc(docRef);
                 if (docSnap.exists()) {
-                    const uid = element.uid;
+                    const uid = data.uid;
                     const updated = pdw.makeEpochStr();
                     const deletionMsg = {
                         _updated: updated,
@@ -88,7 +89,7 @@ export class FireDataStore implements pdw.DataStore {
                     element.data._uid = pdw.makeUID();
                     element.data._updated = pdw.makeEpochStr();
                 }
-                return await fire.setDoc(fire.doc(this.db, 'entries', element.uid), element.toData());
+                return await fire.setDoc(fire.doc(this.db, 'entries', data.uid), data);
 
             } catch (e) {
                 console.error("Error updating entries document: ", e);
