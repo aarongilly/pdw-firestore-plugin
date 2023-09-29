@@ -34,33 +34,32 @@ export class FireDataStore implements pdw.DataStore {
     }
 
     async commit(trans: pdw.Transaction): Promise<pdw.CommitResponse> {
-        console.log(this.allDefData, trans);
-        
+        // console.log(this.allDefData, trans);
         if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance")
-        
+
         // update local cache of all Def data, then push that 
-        trans.create.defs.forEach(def=>{
+        trans.create.defs.forEach(def => {
             this.allDefData.push(def.toData() as pdw.DefData); //create means you *know* its not already there
         })
-        trans.update.defs.forEach(def=>{
-            let assDefData = this.allDefData.find(storeDef=>storeDef._did === def.did && !storeDef._deleted);
-            if(assDefData !== undefined){
+        trans.update.defs.forEach(def => {
+            let assDefData = this.allDefData.find(storeDef => storeDef._did === def.did && !storeDef._deleted);
+            if (assDefData !== undefined) {
                 assDefData._deleted = true;
                 assDefData._updated = def.updated;
-            }else{
+            } else {
                 console.warn('No old Def found associated with the update request for uid ' + def.did + ', just pushing the new one in.');
             }
             this.allDefData.push(def.toData() as pdw.DefData); //create means you *know* its not already there
         })
-        trans.delete.defs.forEach(deletionMsg=>{
-            let assDefData = this.allDefData.find(def=>def._uid === deletionMsg.uid);
-            if(assDefData === undefined) return console.warn('No Def found associated with the deletion request for uid ' + deletionMsg.uid);
+        trans.delete.defs.forEach(deletionMsg => {
+            let assDefData = this.allDefData.find(def => def._uid === deletionMsg.uid);
+            if (assDefData === undefined) return console.warn('No Def found associated with the deletion request for uid ' + deletionMsg.uid);
             assDefData._deleted = deletionMsg.deleted;
             assDefData._updated = deletionMsg.updated;
         })
-        try{
-            await fire.setDoc(fire.doc(this.db,'defManifest', 'allDefs'), {defs: this.allDefData});
-        }catch(e){
+        try {
+            await fire.setDoc(fire.doc(this.db, 'defManifest', 'allDefs'), { defs: this.allDefData });
+        } catch (e) {
             console.error("Error adding defs document: ", e);
         }
 
@@ -74,25 +73,35 @@ export class FireDataStore implements pdw.DataStore {
             }
         })
         trans.update.entries.forEach(async element => {
-            let data = translateElementToFirestore(element);
-            try {
-                const docRef = fire.doc(this.db, 'entries', data.uid);
-                const docSnap = await fire.getDoc(docRef);
-                if (docSnap.exists()) {
-                    const uid = data.uid;
-                    const updated = pdw.makeEpochStr();
-                    const deletionMsg = {
-                        _updated: updated,
-                        _deleted: true
-                    }
-                    await fire.setDoc(fire.doc(this.db, 'entries', uid), deletionMsg, { merge: true })
-                    element.data._uid = pdw.makeUID();
-                    element.data._updated = pdw.makeEpochStr();
+            let maybeJustOverWriteIsBetter = true;
+            if (maybeJustOverWriteIsBetter) {
+                let data = translateElementToFirestore(element);
+                try {
+                    await fire.setDoc(fire.doc(this.db, 'entries', element.uid), data);
+                } catch (e) {
+                    console.error("Error creating adding document: ", e);
                 }
-                return await fire.setDoc(fire.doc(this.db, 'entries', data.uid), data);
+            } else {
+                let data = translateElementToFirestore(element);
+                try {
+                    const docRef = fire.doc(this.db, 'entries', data._uid);
+                    const docSnap = await fire.getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const uid = data._uid;
+                        const updated = pdw.makeEpochStr();
+                        const deletionMsg = {
+                            _updated: updated,
+                            _deleted: true
+                        }
+                        await fire.setDoc(fire.doc(this.db, 'entries', uid), deletionMsg, { merge: true })
+                        data._uid = pdw.makeUID();
+                        data._updated = pdw.makeEpochStr();
+                    }
+                    return await fire.setDoc(fire.doc(this.db, 'entries', data._uid), data);
 
-            } catch (e) {
-                console.error("Error updating entries document: ", e);
+                } catch (e) {
+                    console.error("Error updating entries document: ", e);
+                }
             }
         })
         trans.delete.entries.forEach(async element => {
@@ -113,14 +122,14 @@ export class FireDataStore implements pdw.DataStore {
     async getDefs(includeDeletedForArchiving = false): Promise<pdw.DefData[]> {
         let q = fire.query(fire.collection(this.db, 'defManifest')) as fire.CollectionReference;
         const docSnap = await fire.getDocs(q);
-        
+
         this.allDefData = []; //zero it out
         docSnap.forEach(doc => {
             const parsedDefData = doc.data().defs as pdw.DefData[];
             this.allDefData.push(...parsedDefData)
         });
-        if(includeDeletedForArchiving) return this.allDefData;
-        return this.allDefData.filter(def=>!def._deleted);
+        if (includeDeletedForArchiving) return this.allDefData;
+        return this.allDefData.filter(def => !def._deleted);
 
     }
 
