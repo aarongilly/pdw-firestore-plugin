@@ -30,7 +30,7 @@ export class FireDataStore implements pdw.DataStore {
         this.db = fire.getFirestore()
         this.isConnected = true;
         console.log('✅ Connected to ' + this.db.app.options.projectId);
-        this.allDefData = []; //#TODO
+        this.allDefData = [];
     }
 
     async commit(trans: pdw.Transaction): Promise<pdw.CommitResponse> {
