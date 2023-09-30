@@ -35,88 +35,65 @@ export class FireDataStore implements pdw.DataStore {
 
     async commit(trans: pdw.Transaction): Promise<pdw.CommitResponse> {
         // console.log(this.allDefData, trans);
-        if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance")
+        if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance");
 
-        // update local cache of all Def data, then push that 
-        trans.create.defs.forEach(def => {
-            this.allDefData.push(def.toData() as pdw.DefData); //create means you *know* its not already there
-        })
-        trans.update.defs.forEach(def => {
-            let assDefData = this.allDefData.find(storeDef => storeDef._did === def.did && !storeDef._deleted);
-            if (assDefData !== undefined) {
-                assDefData._deleted = true;
-                assDefData._updated = def.updated;
-            } else {
-                console.warn('No old Def found associated with the update request for uid ' + def.did + ', just pushing the new one in.');
-            }
-            this.allDefData.push(def.toData() as pdw.DefData); //create means you *know* its not already there
-        })
-        trans.delete.defs.forEach(deletionMsg => {
-            let assDefData = this.allDefData.find(def => def._uid === deletionMsg.uid);
-            if (assDefData === undefined) return console.warn('No Def found associated with the deletion request for uid ' + deletionMsg.uid);
-            assDefData._deleted = deletionMsg.deleted;
-            assDefData._updated = deletionMsg.updated;
-        })
-        try {
-            await fire.setDoc(fire.doc(this.db, 'defManifest', 'allDefs'), { defs: this.allDefData });
-        } catch (e) {
-            console.error("Error adding defs document: ", e);
-        }
-
-        // write entries individually
-        trans.create.entries.forEach(async element => {
-            let data = translateElementToFirestore(element);
-            try {
-                await fire.setDoc(fire.doc(this.db, 'entries', element.uid), data);
-            } catch (e) {
-                console.error("Error creating adding document: ", e);
-            }
-        })
-        trans.update.entries.forEach(async element => {
-            let maybeJustOverWriteIsBetter = true;
-            if (maybeJustOverWriteIsBetter) {
-                let data = translateElementToFirestore(element);
-                try {
-                    await fire.setDoc(fire.doc(this.db, 'entries', element.uid), data);
-                } catch (e) {
-                    console.error("Error creating adding document: ", e);
-                }
-            } else {
-                let data = translateElementToFirestore(element);
-                try {
-                    const docRef = fire.doc(this.db, 'entries', data._uid);
-                    const docSnap = await fire.getDoc(docRef);
-                    if (docSnap.exists()) {
-                        const uid = data._uid;
-                        const updated = pdw.makeEpochStr();
-                        const deletionMsg = {
-                            _updated: updated,
-                            _deleted: true
-                        }
-                        await fire.setDoc(fire.doc(this.db, 'entries', uid), deletionMsg, { merge: true })
-                        data._uid = pdw.makeUID();
-                        data._updated = pdw.makeEpochStr();
-                    }
-                    return await fire.setDoc(fire.doc(this.db, 'entries', data._uid), data);
-
-                } catch (e) {
-                    console.error("Error updating entries document: ", e);
-                }
-            }
-        })
-        trans.delete.entries.forEach(async element => {
-            try {
-                await fire.setDoc(fire.doc(this.db, 'entries', element.uid), {
-                    _deleted: element.deleted,
-                    _updated: element.updated
-                }, { merge: true });
-            } catch (e) {
-                console.error("Error deleting entries document: ", e);
-            }
-        })
-        return {
+        let returnObj: pdw.CommitResponse = {
             success: true,
         }
+
+        // update local cache of all Def data, then push to that
+        let batch = fire.writeBatch(this.db);
+        if (trans.create.defs.length > 0 || trans.update.defs.length > 0 || trans.delete.defs.length > 0) {
+            trans.create.defs.forEach(def => {
+                this.allDefData.push(def.toData() as pdw.DefData); //create means you *know* its not already there
+            })
+            trans.update.defs.forEach(def => {
+                let assDefData = this.allDefData.find(storeDef => storeDef._did === def.did && !storeDef._deleted);
+                if (assDefData !== undefined) {
+                    assDefData._deleted = true;
+                    assDefData._updated = def.updated;
+                } else {
+                    console.warn('No old Def found associated with the update request for uid ' + def.did + ', just pushing the new one in.');
+                }
+                this.allDefData.push(def.toData() as pdw.DefData); //create means you *know* its not already there
+            })
+            trans.delete.defs.forEach(deletionMsg => {
+                let assDefData = this.allDefData.find(def => def._uid === deletionMsg.uid);
+                if (assDefData === undefined) return console.warn('No Def found associated with the deletion request for uid ' + deletionMsg.uid);
+                assDefData._deleted = deletionMsg.deleted;
+                assDefData._updated = deletionMsg.updated;
+            })
+            batch.set(fire.doc(this.db, 'defManifest', 'allDefs'), { defs: this.allDefData });
+        }
+
+        //ENTRIES
+        trans.create.entries.forEach(async element => {
+            let data = translateElementToFirestore(element);
+            batch.set(fire.doc(this.db, 'entries', element.uid), data)
+        })
+        trans.update.entries.forEach(async element => {
+            let data = translateElementToFirestore(element);
+            batch.set(fire.doc(this.db, 'entries', element.uid), data)
+        })
+        trans.delete.entries.forEach(async element => {
+            batch.set(fire.doc(this.db, 'entries', element.uid), {
+                _deleted: element.deleted,
+                _updated: element.updated
+            }, { merge: true })
+        })
+        try {
+            await batch.commit();
+            console.log('Batch write to Firestore went well, yo.');
+            returnObj.defData = [...trans.create.defs.map(d=>d.toData() as pdw.DefData), ...trans.update.defs.map(d=>d.toData() as pdw.DefData)];
+            returnObj.entryData = [...trans.create.entries.map(d=>d.toData() as pdw.EntryData), ...trans.update.entries.map(d=>d.toData() as pdw.EntryData)];
+            returnObj.delDefs = trans.delete.defs;
+            returnObj.delEntries = trans.delete.entries;
+        } catch (e) {
+            console.error("An error occurred during the batch entry write:", e);
+            returnObj.msgs?.push('Error during batch entry write')
+            returnObj.success = false;
+        }
+        return returnObj
     }
 
     async getDefs(includeDeletedForArchiving = false): Promise<pdw.DefData[]> {
@@ -182,9 +159,6 @@ export class FireDataStore implements pdw.DataStore {
             returnObj.msgs = e.toString();
             return returnObj;
         }
-
-        // console.log(returnObj);
-
         return returnObj
     }
 
