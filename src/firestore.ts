@@ -1,6 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 import * as fire from 'firebase/firestore';
+import { Auth, User, getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import * as pdw from 'pdw';
 
 function translateElementToFirestore(element: pdw.Entry | pdw.Def): any {
@@ -21,21 +22,99 @@ export class FireDataStore implements pdw.DataStore {
     isConnected: boolean;
     db: fire.Firestore;
     allDefData: pdw.DefData[];
+    auth: Auth;
+    user: User | undefined;
 
-    constructor(firestoreConfig: any) {
+    private constructor(firestoreConfig: any, signInCallback?: Function, signOutCallback?: Function) {
         this.serviceName = 'Firestore';
         this.isConnected = false;
         //attempt to setup Firestore connection using passed-in config
-        initializeApp(firestoreConfig);
+        let app = initializeApp(firestoreConfig);
+        this.auth = getAuth(app);
         this.db = fire.getFirestore()
         this.isConnected = true;
         console.log('✅ Connected to ' + this.db.app.options.projectId);
         this.allDefData = [];
+        this.setupAuthStateHandler(signInCallback, signOutCallback);
+    }
+
+    public signupUser(email: string, password: string) {
+        console.log('signing up ' + email);
+        createUserWithEmailAndPassword(this.auth, email, password)
+            .then((userCredential) => {
+                // Signed up 
+                this.user = userCredential.user;
+                console.log('signed up with: ' + this.user.email);
+                this.pdw!.setDataStore(this);
+                const configRef = fire.doc(this.db, this.user.uid, '!config');
+                fire.setDoc(configRef, {
+                    user: this.user.email,
+                })
+            })
+            .catch((error) => {
+                const errorCode = error.code;
+                const errorMessage = error.message;
+                console.error('Signup error!', errorCode, errorMessage);
+            });
+    }
+
+    async logoutUser() {
+        if (this.user === undefined) console.log('no user seen');
+        await signOut(this.auth);
+        this.user = undefined;
+    }
+
+    loginUser(email: string, password: string) {
+        signInWithEmailAndPassword(this.auth, email, password)
+            .then((userCredential) => {
+                // Signed in 
+                this.user = userCredential.user;
+                this.pdw!.setDataStore(this);
+                const configRef = fire.doc(this.db, this.user.uid, '!config');
+                fire.setDoc(configRef, {
+                    user: this.user.email,
+                })
+            })
+            .catch((error) => {
+                const errorCode = error.code;
+                const errorMessage = error.message;
+                console.error('Login error!', errorCode, errorMessage);
+            });
+    }
+
+    setupAuthStateHandler(loginFunc?: Function, logoutFunc?: Function) {
+        onAuthStateChanged(this.auth, async (user) => {
+            if (user) {
+                this.user = user;
+                this.pdw!.setDataStore(this);
+                if (loginFunc !== undefined) {
+                    loginFunc()
+                } else {
+                    console.log('Logged in ' + user.email);
+                }
+            } else {
+                console.log('Logging out, reverting to in-memory datastore.');                
+                this.pdw!.setDataStore(new pdw.DefaultDataStore(this.pdw!));
+                if (logoutFunc !== undefined) {
+                    logoutFunc()
+                } else {
+                    console.log('Logged out');
+                }
+            }
+        });
     }
 
     async commit(trans: pdw.Transaction): Promise<pdw.CommitResponse> {
-        // console.log(this.allDefData, trans);
-        if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance");
+        if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'init' method on the FireDataStore instance and pass in a ref to the PDW instance");
+        if (this.user === undefined){
+            console.warn("No user signed in. Doing nothing and returning an empty commit response.");
+            return {
+                success: false,
+                msgs: ['No user signed in'],
+                entryData: [],
+                defData: [],
+            }
+        }
 
         let returnObj: pdw.CommitResponse = {
             success: true,
@@ -63,20 +142,20 @@ export class FireDataStore implements pdw.DataStore {
                 assDefData._deleted = deletionMsg.deleted;
                 assDefData._updated = deletionMsg.updated;
             })
-            batch.set(fire.doc(this.db, 'defManifest', 'allDefs'), { defs: this.allDefData });
+            batch.set(fire.doc(this.db, this.user!.uid, '!defManifest'), { defs: this.allDefData });
         }
 
         //ENTRIES
         trans.create.entries.forEach(async element => {
             let data = translateElementToFirestore(element);
-            batch.set(fire.doc(this.db, 'entries', element.uid), data)
+            batch.set(fire.doc(this.db, this.user!.uid, element.uid), data)
         })
         trans.update.entries.forEach(async element => {
             let data = translateElementToFirestore(element);
-            batch.set(fire.doc(this.db, 'entries', element.uid), data)
+            batch.set(fire.doc(this.db, this.user!.uid, element.uid), data)
         })
         trans.delete.entries.forEach(async element => {
-            batch.set(fire.doc(this.db, 'entries', element.uid), {
+            batch.set(fire.doc(this.db, this.user!.uid, element.uid), {
                 _deleted: element.deleted,
                 _updated: element.updated
             }, { merge: true })
@@ -84,8 +163,8 @@ export class FireDataStore implements pdw.DataStore {
         try {
             await batch.commit();
             console.log('Batch write to Firestore went well, yo.');
-            returnObj.defData = [...trans.create.defs.map(d=>d.toData() as pdw.DefData), ...trans.update.defs.map(d=>d.toData() as pdw.DefData)];
-            returnObj.entryData = [...trans.create.entries.map(d=>d.toData() as pdw.EntryData), ...trans.update.entries.map(d=>d.toData() as pdw.EntryData)];
+            returnObj.defData = [...trans.create.defs.map(d => d.toData() as pdw.DefData), ...trans.update.defs.map(d => d.toData() as pdw.DefData)];
+            returnObj.entryData = [...trans.create.entries.map(d => d.toData() as pdw.EntryData), ...trans.update.entries.map(d => d.toData() as pdw.EntryData)];
             returnObj.delDefs = trans.delete.defs;
             returnObj.delEntries = trans.delete.entries;
         } catch (e) {
@@ -97,17 +176,16 @@ export class FireDataStore implements pdw.DataStore {
     }
 
     async getDefs(includeDeletedForArchiving = false): Promise<pdw.DefData[]> {
-        let q = fire.query(fire.collection(this.db, 'defManifest')) as fire.CollectionReference;
-        const docSnap = await fire.getDocs(q);
-
-        this.allDefData = []; //zero it out
-        docSnap.forEach(doc => {
-            const parsedDefData = doc.data().defs as pdw.DefData[];
-            this.allDefData.push(...parsedDefData)
-        });
+        if (this.user === undefined){
+            console.warn("No user signed in. Doing nothing and returning an empty array.");
+            return []
+        }
+        let docRef = fire.doc(this.db, this.user.uid, '!defManifest')
+        const docSnap = await fire.getDoc(docRef);
+        const defObj = docSnap.data() as {defs: pdw.DefData[]};
+        this.allDefData = [...defObj.defs];
         if (includeDeletedForArchiving) return this.allDefData;
         return this.allDefData.filter(def => !def._deleted);
-
     }
 
     subscribeToQuery(params: pdw.ReducedParams, callback: (entries: pdw.Entry[]) => any): Function {
@@ -136,10 +214,18 @@ export class FireDataStore implements pdw.DataStore {
         if (params.scope !== undefined) whereClauses.push(fire.where('_scope', 'in', params.scope));
         if (params.from !== undefined) whereClauses.push(fire.where('periodEnd', ">=", params.from.getStart().toString()));
         if (params.to !== undefined) whereClauses.push(fire.where('periodEnd', "<=", params.to.getEnd().toString()));
-        return fire.query(fire.collection(this.db, 'entries'), ...whereClauses);
+        return fire.query(fire.collection(this.db, this.user!.uid, 'entries'), ...whereClauses);
     }
 
     async getEntries(params: pdw.ReducedParams): Promise<pdw.ReducedQueryResponse> {
+        if (this.user === undefined){
+            console.warn("No user signed in. Doing nothing and returning an empty array.");
+            return {
+                success: false,
+                msgs: ['No user signed in.'],
+                entries: []
+            }
+        }
         if (this.pdw === undefined) throw new Error("No PDW instance connected. Run the 'connect' method on the FireDataStore instance and pass in a ref to the PDW instance")
         let returnObj: pdw.ReducedQueryResponse = {
             success: true, //default assume happy!
@@ -167,11 +253,11 @@ export class FireDataStore implements pdw.DataStore {
         throw new Error("Method not implemented.");
     }
 
-    static async init(firebaseConfig: any, pdwRef: pdw.PDW): Promise<boolean> {
-        const firestoreInstance = new FireDataStore(firebaseConfig);
+    static async init(firebaseConfig: any, pdwRef: pdw.PDW, loginCallback?: Function, logOutCallback?: Function): Promise<FireDataStore> {
+        const firestoreInstance = new FireDataStore(firebaseConfig, loginCallback, logOutCallback);
         await firestoreInstance.connect(pdwRef);
-        await pdwRef.setDataStore(firestoreInstance);
-        return true
+        // await pdwRef.setDataStore(firestoreInstance);
+        return firestoreInstance;
     }
 
     async connect(pdw: pdw.PDW): Promise<boolean> {
@@ -179,3 +265,4 @@ export class FireDataStore implements pdw.DataStore {
         return true
     }
 }
+
