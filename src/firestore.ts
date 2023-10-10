@@ -211,6 +211,7 @@ export class FireDataStore implements pdw.DataStore {
         const unsub = fire.onSnapshot(this.buildQueryFromParams(params), (docSnap) => {
             let entries: pdw.Entry[] = [];
             docSnap.forEach(doc => {
+                if(doc.id === '!defManifest') return; //don't add the defManifest as an entry
                 const parsedEntryData = translateFirestoreToEntry(doc.data()) as pdw.EntryData;
                 entries.push(new pdw.Entry(parsedEntryData));
             })
@@ -221,8 +222,6 @@ export class FireDataStore implements pdw.DataStore {
 
     private buildQueryFromParams(params: pdw.ReducedParams): fire.Query {
         const whereClauses: fire.QueryFieldFilterConstraint[] = [];
-        //exclude the manifest document
-        whereClauses.push(fire.where('_uid', '!=', '!defManifest'));
         if (params.uid !== undefined) whereClauses.push(fire.where('_uid', 'in', params.uid));
         if (params.includeDeleted === 'no') whereClauses.push(fire.where('_deleted', '==', false));
         if (params.includeDeleted === 'only') whereClauses.push(fire.where('_deleted', '==', true));
@@ -257,6 +256,7 @@ export class FireDataStore implements pdw.DataStore {
         try {
             const docSnap = await fire.getDocs(q);
             docSnap.forEach(doc => {
+                if(doc.id === '!defManifest') return; //don't add the defManifest as an entry
                 const parsedEntryData = translateFirestoreToEntry(doc.data()) as pdw.EntryData;
                 returnObj.entries.push(parsedEntryData)
             })
