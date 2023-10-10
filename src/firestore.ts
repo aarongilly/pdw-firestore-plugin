@@ -66,7 +66,6 @@ export class FireDataStore implements pdw.DataStore {
         if (this.user === undefined) console.log('no user seen');
         const configRef = fire.doc(this.db, this.user!.uid, '!defManifest');
         this.configData = (await fire.getDoc(configRef)).data();
-        delete this.configData.defs
         return this.configData;
     }
 
@@ -91,10 +90,6 @@ export class FireDataStore implements pdw.DataStore {
                 // Signed in 
                 this.user = userCredential.user;
                 this.pdw!.setDataStore(this);
-                const configRef = fire.doc(this.db, this.user.uid, '!defManifest');
-                fire.setDoc(configRef, {
-                    email: this.user.email,
-                }, {merge: true})
             })
             .catch((error) => {
                 const errorCode = error.code;
@@ -163,7 +158,7 @@ export class FireDataStore implements pdw.DataStore {
                 assDefData._deleted = deletionMsg.deleted;
                 assDefData._updated = deletionMsg.updated;
             })
-            batch.set(fire.doc(this.db, this.user!.uid, '!defManifest'), { defs: this.allDefData });
+            batch.set(fire.doc(this.db, this.user!.uid, '!defManifest'), { defs: this.allDefData }, {merge: true});
         }
 
         //ENTRIES
@@ -204,6 +199,8 @@ export class FireDataStore implements pdw.DataStore {
         let docRef = fire.doc(this.db, this.user.uid, '!defManifest')
         const docSnap = await fire.getDoc(docRef);
         const defObj = docSnap.data() as {defs: pdw.DefData[]};
+        console.log('🔥',defObj);
+        
         this.allDefData = [...defObj.defs];
         if (includeDeletedForArchiving) return this.allDefData;
         return this.allDefData.filter(def => !def._deleted);
