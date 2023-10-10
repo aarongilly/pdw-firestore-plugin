@@ -24,6 +24,10 @@ export class FireDataStore implements pdw.DataStore {
     allDefData: pdw.DefData[];
     auth: Auth;
     user: User | undefined;
+    /**
+     * Whatever data an application wants to load alongside defs in the user's data
+     */
+    configData: any;
 
     private constructor(firestoreConfig: any, signInCallback?: Function, signOutCallback?: Function) {
         this.serviceName = 'Firestore';
@@ -46,16 +50,33 @@ export class FireDataStore implements pdw.DataStore {
                 this.user = userCredential.user;
                 console.log('signed up with: ' + this.user.email);
                 this.pdw!.setDataStore(this);
-                const configRef = fire.doc(this.db, this.user.uid, '!config');
+                const configRef = fire.doc(this.db, this.user.uid, '!defManifest');
                 fire.setDoc(configRef, {
-                    user: this.user.email,
-                })
+                    email: this.user.email,
+                }, {merge: true})
             })
             .catch((error) => {
                 const errorCode = error.code;
                 const errorMessage = error.message;
                 console.error('Signup error!', errorCode, errorMessage);
             });
+    }
+
+    async getConfigData(){
+        if (this.user === undefined) console.log('no user seen');
+        const configRef = fire.doc(this.db, this.user!.uid, '!defManifest');
+        this.configData = (await fire.getDoc(configRef)).data();
+        delete this.configData.defs
+        return this.configData;
+    }
+
+    async setConfigDataField(key:string, value: any){
+        if (this.user === undefined) console.log('no user seen');
+        const configRef = fire.doc(this.db, this.user!.uid, '!defManifest');
+        if(key === 'defs' || key === 'email') throw new Error('Cannot set keys "defs" or "email"');
+        fire.setDoc(configRef, {
+            [key]: value,
+        }, {merge: true})
     }
 
     async logoutUser() {
@@ -70,10 +91,10 @@ export class FireDataStore implements pdw.DataStore {
                 // Signed in 
                 this.user = userCredential.user;
                 this.pdw!.setDataStore(this);
-                const configRef = fire.doc(this.db, this.user.uid, '!config');
+                const configRef = fire.doc(this.db, this.user.uid, '!defManifest');
                 fire.setDoc(configRef, {
-                    user: this.user.email,
-                })
+                    email: this.user.email,
+                }, {merge: true})
             })
             .catch((error) => {
                 const errorCode = error.code;
