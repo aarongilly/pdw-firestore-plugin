@@ -221,6 +221,8 @@ export class FireDataStore implements pdw.DataStore {
 
     private buildQueryFromParams(params: pdw.ReducedParams): fire.Query {
         const whereClauses: fire.QueryFieldFilterConstraint[] = [];
+        //exclude the manifest document
+        whereClauses.push(fire.where('_uid', '!=', '!defManifest'));
         if (params.uid !== undefined) whereClauses.push(fire.where('_uid', 'in', params.uid));
         if (params.includeDeleted === 'no') whereClauses.push(fire.where('_deleted', '==', false));
         if (params.includeDeleted === 'only') whereClauses.push(fire.where('_deleted', '==', true));
@@ -232,7 +234,7 @@ export class FireDataStore implements pdw.DataStore {
         if (params.scope !== undefined) whereClauses.push(fire.where('_scope', 'in', params.scope));
         if (params.from !== undefined) whereClauses.push(fire.where('periodEnd', ">=", params.from.getStart().toString()));
         if (params.to !== undefined) whereClauses.push(fire.where('periodEnd', "<=", params.to.getEnd().toString()));
-        return fire.query(fire.collection(this.db, this.user!.uid, 'entries'), ...whereClauses);
+        return fire.query(fire.collection(this.db, this.user!.uid), ...whereClauses);
     }
 
     async getEntries(params: pdw.ReducedParams): Promise<pdw.ReducedQueryResponse> {
@@ -250,8 +252,8 @@ export class FireDataStore implements pdw.DataStore {
             entries: []
         }
 
-        let q = this.buildQueryFromParams(params)
-
+        let q = this.buildQueryFromParams(params);
+        
         try {
             const docSnap = await fire.getDocs(q);
             docSnap.forEach(doc => {

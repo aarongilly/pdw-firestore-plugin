@@ -63,7 +63,7 @@ logUserBtn.onclick = () => {
     console.log(pdwRef);
 }
 readBtn.onclick = async () => {
-    const defs = await pdwRef.getDefs(false);
+    const defs = await pdwRef.getEntries({includeDeleted: 'yes'});
     console.log(pdwRef.manifest);
 }
 writeBtn.onclick = async () => {
