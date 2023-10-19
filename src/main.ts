@@ -30,6 +30,16 @@ passwordInput.value = 'peanutbutter';//'lmp14tdp-2egb';
 //establish singleton
 let pdwRef = pdw.PDW.getInstance();
 
+//#REAL ONE
+// export const firebaseConfig = {
+//     apiKey: "AIzaSyBv4E0pHye0OwNU3nzVwsDFw8Q2mSKkmTc",
+//     authDomain: "pdw-firedatastore.firebaseapp.com",
+//     projectId: "pdw-firedatastore",
+//     storageBucket: "pdw-firedatastore.appspot.com",
+//     messagingSenderId: "59120475131",
+//     appId: "1:59120475131:web:435d58cffcf9e629ed495e"
+// };
+
 //THE DEVELOPMENT ONE---- pdw-firestore-island!
 const firebaseConfig = {
     apiKey: "AIzaSyDmBBpJsp7QGb8qpdimTvE_AzQCPfpTLyM",
@@ -63,11 +73,13 @@ logUserBtn.onclick = () => {
     console.log(pdwRef);
 }
 readBtn.onclick = async () => {
-    const defs = await pdwRef.getEntries({includeDeleted: 'yes'});
-    console.log(pdwRef.manifest);
+    const params = {"includeDeleted":"no","did":"dddd","from":"2023"};
+    //// @ts-expect-error
+    const entries = await pdwRef.query({from: '2023-10', includeDeleted: 'no', did: 'qcoz'}).run();
+    console.log(entries);
 }
 writeBtn.onclick = async () => {
-    await pdwRef.newDef({_did: 'bbbb', _lbl: "Test B"});
+    await pdwRef.setDefs([],[{_did: 'aaaa', _lbl: "Test A", _desc: 'Not updated'}]);
     console.log(pdwRef.manifest);
 }
 
@@ -76,43 +88,44 @@ writeBtn.onclick = async () => {
 // console.log(await pdwRef.getDefs(true))
 
 async function write() {
-    let def = pdwRef.getFromManifest('zzfh');
-    let e1 = new pdw.Entry({
-        '7qhv': 'Meta',
-        'btz9': "Entry 1"
-    }, def);
-    let e2 = new pdw.Entry({
-        '7qhv': 'Meta',
-        'btz9': "Entry 2"
-    }, def);
-    let e3 = new pdw.Entry({
-        '7qhv': 'Meta',
-        'btz9': "Entry 3"
-    }, def);
-    let result = await pdwRef.setAll({ entries: [e1, e2, e3], defs: [] })
+    let result = await pdwRef.setDefs()
+    // let def = pdwRef.getFromManifest('zzfh');
+    // let e1 = new pdw.Entry({
+    //     '7qhv': 'Meta',
+    //     'btz9': "Entry 1"
+    // }, def);
+    // let e2 = new pdw.Entry({
+    //     '7qhv': 'Meta',
+    //     'btz9': "Entry 2"
+    // }, def);
+    // let e3 = new pdw.Entry({
+    //     '7qhv': 'Meta',
+    //     'btz9': "Entry 3"
+    // }, def);
+    // let result = await pdwRef.setAll({ entries: [e1, e2, e3], defs: [] })
 
     console.log(result);
 }
 
-async function read() {
-    const key = document.querySelector<HTMLButtonElement>('#key')!.value;
-    const val = document.querySelector<HTMLButtonElement>('#val')!.value;
+// async function read() {
+//     const key = 'from'
+//     const val = '2022';
 
-    document.querySelector<HTMLButtonElement>('#result')!.innerText = "...searching";
+//     document.querySelector<HTMLButtonElement>('#result')!.innerText = "...searching";
 
-    // let def = await pdwRef.getDefs({[key]: val, includeDeleted: 'yes' });
-    // let entries = await pdwRef.getEntries({[key]: val, includeDeleted: 'yes' });
-    let q = new pdw.Query({ [key]: val, includeDeleted: 'no' });
-    // q.forDids(val);
-    const result = await q.run();
-    //   let def = await pdwRef.getDefs({type: "Def", did: 'bbbb', includeDeleted: 'yes'});
-    //   let def = await pdwRef.getDefs({type: "Def", updatedAfter: 'lmh85om9', createdBefore: 'lmh85omb', includeDeleted: 'yes'});
+//     // let def = await pdwRef.getDefs({[key]: val, includeDeleted: 'yes' });
+//     // let entries = await pdwRef.getEntries({[key]: val, includeDeleted: 'yes' });
+//     let q = new pdw.Query({ [key]: val, includeDeleted: 'no' });
+//     // q.forDids(val);
+//     const result = await q.run();
+//     //   let def = await pdwRef.getDefs({type: "Def", did: 'bbbb', includeDeleted: 'yes'});
+//     //   let def = await pdwRef.getDefs({type: "Def", updatedAfter: 'lmh85om9', createdBefore: 'lmh85omb', includeDeleted: 'yes'});
 
-    // console.log(result);
+//     console.log(result);
 
-    (<FireDataStore>pdwRef.dataStore).subscribeToQuery({ [key]: val, includeDeleted: 'no' }, (data) => {
-        console.log(data);
-        document.querySelector<HTMLButtonElement>('#result-head')!.innerText = key + ": " + val;
-        document.querySelector<HTMLButtonElement>('#result')!.innerHTML = 'Length: ' + data.length + "<br/>" + JSON.stringify(data.map(d => d.toData()), null, 4);
-    });
-}
+//     (<FireDataStore>pdwRef.dataStore).subscribeToQuery({ [key]: val, includeDeleted: 'no' }, (data) => {
+//         console.log(data);
+//         document.querySelector<HTMLButtonElement>('#result-head')!.innerText = key + ": " + val;
+//         document.querySelector<HTMLButtonElement>('#result')!.innerHTML = 'Length: ' + data.length + "<br/>" + JSON.stringify(data.map(d => d.toData()), null, 4);
+//     });
+// }

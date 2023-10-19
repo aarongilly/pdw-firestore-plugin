@@ -143,13 +143,19 @@ export class FireDataStore implements pdw.DataStore {
                 this.allDefData.push(def.toData() as pdw.DefData); //create means you *know* its not already there
             })
             trans.update.defs.forEach(def => {
-                let assDefData = this.allDefData.find(storeDef => storeDef._did === def.did && !storeDef._deleted);
-                if (assDefData !== undefined) {
-                    assDefData._deleted = true;
-                    assDefData._updated = def.updated;
+                // console.log('before:',this.allDefData);
+                let assDefData = this.allDefData.findIndex(storeDef => storeDef._did === def.did && !storeDef._deleted);
+                // console.log('found', assDefData);
+                
+                if (assDefData !== -1) {
+                    this.allDefData.splice(assDefData,1)
+                    // assDefData._deleted = true;
+                    // assDefData._updated = def.updated;
                 } else {
                     console.warn('No old Def found associated with the update request for uid ' + def.did + ', just pushing the new one in.');
                 }
+                // console.log('after:',this.allDefData);
+                
                 this.allDefData.push(def.toData() as pdw.DefData); //create means you *know* its not already there
             })
             trans.delete.defs.forEach(deletionMsg => {
